@@ -119,8 +119,8 @@ let () =
          [Grpc_eio.Client.call] must complete the round-trip regardless. *)
       result :=
         Some
-          (Grpc_eio.Client.call ~service:"test.DeadlockCheck"
-             ~rpc:"UnaryMethod" ~scheme:"http"
+          (Grpc_eio.Client.call ~service:"test.DeadlockCheck" ~rpc:"UnaryMethod"
+             ~scheme:"http"
              ~do_request:(H2_eio.Client.request conn ~error_handler:ignore)
              ~handler:(Grpc_eio.Client.Rpc.unary "ping" ~f:(fun r -> r))
              ());
