@@ -560,7 +560,7 @@ let run_record_route connection =
       failwith (Printf.sprintf "HTTP2 error: %s" (H2.Status.to_string e))
 ```
 
-With this stream of points we setup another handler using `Client.Rpc.client_streaming`. `f` is a `Seq.writer` for sending encoded points to the server; `Seq.write f x` enqueues a frame and `Seq.close_writer f` signals end-of-stream. `response` is a `string option Promise.t` that resolves once the server has replied; we await it and decode the `RouteSummary`.
+With this stream of points we setup another handler using `Client.Rpc.client_streaming`. The type of the callback arguments is important to understand: `writer` is a `Seq.writer` for sending data down the gRPC stream to the server. Calling `Seq.write writer value` will send the encoded value to the server, while calling `Seq.close_writer writer` signals that we have finished streaming. Here you can see we iterate over all the points, writing each one to the stream, and when we have sent everything we close the writer to signal we are finished. `response` is a promise that resolves once the server has replied; we await it and decode the `RouteSummary`.
 
 ### Bidirectional streaming RPC
 
@@ -628,7 +628,7 @@ We start by generating a short sequence of locations, similar to how we did for 
       failwith (Printf.sprintf "HTTP2 error: %s" (H2.Status.to_string e))
 ```
 
-Then we again use the `Client.Rpc` module to setup a `bidirectional_streaming` handler (`val bidirectional_streaming : f:(string Seq.writer -> string Seq.t -> 'a) -> 'a handler`). `writer` is a `Seq.writer` for sending encoded notes; `reader` is a `Seq.t` of encoded responses. We define a recursive function `go` that sends a note with `Seq.write`, sleeps briefly to let the server echo it back, reads the next response with `Seq.uncons`, and recurses. When there are no more notes to send we call `Seq.close_writer writer` to signal end-of-stream.
+Then we again use the `Client.Rpc` module to setup a `bidirectional_streaming` handler with an interesting type signature: `val bidirectional_streaming : f:(string Seq.writer -> string Seq.t -> 'a) -> 'a handler`. Somewhat intimidating but hopefully understandable in context. The function `f` receives two arguments: a `Seq.writer` for sending notes to the server, and a `Seq.t` for reading the stream of responses coming back. Calling `Seq.write writer value` sends an encoded value to the stream, with the same semantics as before. The `string Seq.t` is the stream of `RouteNote` responses from the server, which we need to decode and print out. We define a recursive function `go` to fold over the list, sending `route_notes`, sleeping to wait for a server response, and printing out that response. When we run out of `route_notes` to send we call `Seq.close_writer writer` to tell the server we are done and it can stop listening.
 Other combinations of sending and receiving are possible, the reader is encouraged to try them out.
 
 ## Try it out!
