@@ -1,12 +1,23 @@
+type error =
+  | ResponseError of H2.Status.t
+  | ConnectionError of H2.Client_connection.error
+(** Error type distinguishing HTTP/2 response errors from connection-level
+    failures. [ConnectionError] indicates that the H2 connection dropped
+    before the server sent response HEADERS — without this, the client
+    would hang indefinitely on unresolved promises. *)
+
 module Rpc : sig
-  type 'a handler = H2.Body.Writer.t -> H2.Body.Reader.t Eio.Promise.t -> 'a
+  type 'a handler =
+    H2.Body.Writer.t ->
+    (H2.Body.Reader.t, error) result Eio.Promise.t ->
+    'a
   (** [handler] is a function that implements an RPC by sending and receiving
       gRPC messages over a single HTTP/2 stream.
 
       [write_body] is available immediately; the handler should begin sending
       the request body without waiting for [read_body_p] to resolve.
-      [read_body_p] resolves to [H2.Body.Reader.t] once the server sends its
-      response HEADERS frame.
+      [read_body_p] resolves to [Ok reader] once the server sends its response
+      HEADERS frame, or to [Error (ConnectionError _)] if the connection drops.
 
       The gRPC over HTTP/2 protocol and RFC 9113 §5.1 place no ordering
       constraint between client DATA frames and server HEADERS; a conforming
@@ -38,14 +49,18 @@ module Rpc : sig
 end
 
 type response_handler = H2.Client_connection.response_handler
+type error_handler = H2.Client_connection.error_handler
 
 type do_request =
   ?flush_headers_immediately:bool ->
   ?trailers_handler:(H2.Headers.t -> unit) ->
   H2.Request.t ->
+  error_handler:error_handler ->
   response_handler:response_handler ->
   H2.Body.Writer.t
-(** [do_request] is the type of a function that performs the request *)
+(** [do_request] is the type of a function that performs the request.
+    The [error_handler] is invoked if the H2 connection drops, allowing
+    outstanding promises to be resolved with an error instead of hanging. *)
 
 val call :
   service:string ->
@@ -55,7 +70,10 @@ val call :
   do_request:do_request ->
   ?headers:H2.Headers.t ->
   unit ->
-  ('a * Grpc.Status.t, H2.Status.t) result
+  ('a * Grpc.Status.t, error) result
 (** [call ~service ~rpc ~handler ~do_request ()] calls the rpc endpoint given
         by [service] and [rpc] using the [do_request] function. The [handler] is
-        called when this request is set up to send and receive data. *)
+        called when this request is set up to send and receive data.
+
+        Returns [Error (ConnectionError _)] if the H2 connection drops before
+        the server responds, instead of hanging indefinitely. *)

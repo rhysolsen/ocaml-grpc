@@ -121,7 +121,7 @@ let () =
         Some
           (Grpc_eio.Client.call ~service:"test.DeadlockCheck" ~rpc:"UnaryMethod"
              ~scheme:"http"
-             ~do_request:(H2_eio.Client.request conn ~error_handler:ignore)
+             ~do_request:(H2_eio.Client.request conn)
              ~handler:(Grpc_eio.Client.Rpc.unary "ping" ~f:(fun r -> r))
              ());
       Eio.Promise.await (H2_eio.Client.shutdown conn));
@@ -132,6 +132,8 @@ let () =
       print_endline
         "PASS: unary call completed against deferred-response server"
   | Some (Ok (None, _)) -> failwith "FAIL: empty response body"
-  | Some (Error s) ->
+  | Some (Error (Grpc_eio.Client.ResponseError s)) ->
       failwith (Format.asprintf "FAIL: H2 error: %a" H2.Status.pp_hum s)
+  | Some (Error (Grpc_eio.Client.ConnectionError _)) ->
+      failwith "FAIL: connection error"
   | None -> failwith "FAIL: client fiber did not set result"

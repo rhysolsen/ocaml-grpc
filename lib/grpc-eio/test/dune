@@ -1,3 +1,11 @@
 (test
  (name test_concurrent_handler)
  (libraries grpc grpc-eio h2 h2-eio eio_main))
+
+(test
+ (name test_exception_isolation)
+ (libraries grpc grpc-eio h2 h2-eio eio_main))
+
+(test
+ (name test_connection_drop)
+ (libraries grpc grpc-eio h2 h2-eio eio_main))
